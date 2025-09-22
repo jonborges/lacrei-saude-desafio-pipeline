@@ -1,0 +1,163 @@
+name: DevSecOps Pipeline Melhorado
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Rodar testes unitários
+        run: npm test
+
+      - name: Análise de vulnerabilidades de dependências
+        run: npm audit --audit-level=high
+
+  security-analysis:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v3
+
+      - name: Login no Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build e start da aplicação para scan
+        run: |
+          docker build -t api-lacrei-saude:latest .
+          docker run -d --name api-lacrei-saude -p 8080:3000 api-lacrei-saude
+          timeout 60s bash -c 'until curl -s http://localhost:8080/status | grep "OK"; do echo -n "."; sleep 2; done'
+          echo "Aplicação iniciada!"
+
+      - name: Rodar ZAP Scan
+        run: |
+          docker pull zaproxy/zap-stable
+          docker run --network="host" \
+            -v "$(pwd)/zap-config.conf:/zap/wrk/zap-config.conf" \
+            zaproxy/zap-stable zap-full-scan.py \
+            -t http://localhost:8080 \
+            -c /zap/wrk/zap-config.conf \
+            -r zap-report.html \
+            -x zap-report.xml \
+            -m 2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Salvar relatório de vulnerabilidades
+        uses: actions/upload-artifact@v3
+        with:
+          name: zap-report
+          path: zap-report.html
+
+      - name: Parar container
+        run: docker stop api-lacrei-saude && docker rm api-lacrei-saude
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build, security-analysis]
+    if: github.ref != 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build e Push Docker Staging
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest \
+                       -t ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }} .
+          docker push ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest
+
+      - name: Deploy Staging via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }}
+            docker stop api-lacrei-saude-staging || true
+            docker rm api-lacrei-saude-staging || true
+            docker run -d --name api-lacrei-saude-staging -p 8081:3000 \
+              --restart always \
+              ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }}
+            sleep 10
+            STATUS=$(curl -s http://localhost:8081/status | grep OK || echo "FAIL")
+            if [ "$STATUS" != "OK" ]; then
+              echo "Healthcheck falhou! Rollback container anterior..."
+              docker stop api-lacrei-saude-staging && docker rm api-lacrei-saude-staging
+              docker run -d --name api-lacrei-saude-staging -p 8081:3000 \
+                --restart always \
+                ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest
+              exit 1
+            fi
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [build, security-analysis]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build e Push Docker Production
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:latest \
+                       -t ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:${{ github.sha }} .
+          docker push ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:${{ github.sha }}
+
+      - name: Deploy Production via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:${{ github.sha }}
+            docker stop api-lacrei-saude-production || true
+            docker rm api-lacrei-saude-production || true
+            docker run -d --name api-lacrei-saude-production -p 80:3000 \
+              --restart always \
+              ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:${{ github.sha }}
+            # Healthcheck básico
+            sleep 10
+            STATUS=$(curl -s http://localhost/status | grep OK || echo "FAIL")
+            if [ "$STATUS" != "OK" ]; then
+              echo "Healthcheck falhou! Rollback container anterior..."
+              docker stop api-lacrei-saude-production && docker rm api-lacrei-saude-production
+              docker run -d --name api-lacrei-saude-production -p 80:3000 \
+                --restart always \
+                ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:latest
+              exit 1
+            fi
