@@ -6,25 +6,23 @@ app.disable('x-powered-by');
 
 const rotaStatus = '/status';
 
-app.use(helmet({
-  crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: false,
-  crossOriginResourcePolicy: false,
-  permissionsPolicy: false,
-}));
-
-app.use(helmet.frameguard({ action: 'deny' }));
-app.use(helmet.xssFilter());
-app.use(helmet.noSniff());
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'"],
-    styleSrc: ["'self'", "'unsafe-inline'"],
-    scriptSrc: ["'self'"],
-    objectSrc: ["'none'"],
-    upgradeInsecureRequests: [],
-  },
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "style-src": ["'self'", "'unsafe-inline'"],
+      },
+    },
+    permissionsPolicy: {
+      policy: {
+        camera: [],
+        microphone: [],
+        geolocation: [],
+      },
+    },
+  })
+);
 
 app.get('/', (req, res) => {
   res.status(200).send(`
@@ -81,7 +79,7 @@ process.on('SIGTERM', () => {
   server.close(() => {
     console.log('Servidor encerrado.');
     process.exit(0);
-  });
+  },
 });
 
 module.exports = server;
