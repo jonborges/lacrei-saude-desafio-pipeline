@@ -7,10 +7,9 @@ app.disable('x-powered-by');
 
 const rotaStatus = '/status';
 
-// Servir arquivos estáticos (CSS externo)
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Helmet com CSP e Headers de segurança
+
 app.use(helmet({
   frameguard: { action: 'deny' },
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
@@ -21,7 +20,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
-      styleSrc: ["'self'"], // apenas externo
+      styleSrc: ["'self'"], 
       imgSrc: ["'self'", "data:"],
       connectSrc: ["'self'"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
@@ -31,19 +30,25 @@ app.use(helmet({
   },
 }));
 
-// Middleware global para Permissions Policy
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', "camera=(), microphone=(), geolocation=()");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
+
+
 app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', "camera=(), microphone=(), geolocation=()");
   next();
 });
 
-// Rotas mínimas para satisfazer o ZAP Scan
+
 app.get(['/sitemap.xml', '/robots.txt'], (req, res) => {
   res.setHeader('Content-Type', 'text/plain');
   res.status(200).send('');
 });
 
-// Rota principal
+
 app.get('/', (req, res) => {
   res.status(200).send(`
     <!DOCTYPE html>
@@ -64,7 +69,7 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Rota de status
+
 app.get(rotaStatus, (req, res) => {
   const resposta = { status: 'OK', timestamp: new Date().toISOString() };
   res.json(resposta);
