@@ -7,9 +7,6 @@ app.disable('x-powered-by');
 
 const rotaStatus = '/status';
 
-app.use(express.static(path.join(__dirname, '../public')));
-
-
 app.use(helmet({
   frameguard: { action: 'deny' },
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
@@ -29,6 +26,13 @@ app.use(helmet({
     },
   },
 }));
+
+
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
 
 app.use(express.static(path.join(__dirname, '../public'), {
   setHeaders: (res, path) => {
