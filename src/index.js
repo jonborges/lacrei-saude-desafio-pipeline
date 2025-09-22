@@ -6,23 +6,20 @@ app.disable('x-powered-by');
 
 const rotaStatus = '/status';
 
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "style-src": ["'self'", "'unsafe-inline'"],
-      },
-    },
-    permissionsPolicy: {
-      policy: {
-        camera: [],
-        microphone: [],
-        geolocation: [],
-      },
-    },
-  })
-);
+app.use(helmet.frameguard({ action: 'deny' }));
+app.use(helmet.xssFilter());
+app.use(helmet.noSniff());
+app.use(helmet.hsts({ maxAge: 31536000, includeSubDomains: true, preload: true }));
+app.use(helmet.crossOriginOpenerPolicy({ policy: "same-origin" }));
+app.use(helmet.crossOriginEmbedderPolicy({ policy: "require-corp" }));
+app.use(helmet.crossOriginResourcePolicy({ policy: "same-origin" }));
+app.use(helmet.permissionsPolicy({ policy: { camera: [], microphone: [], geolocation: [] } }));
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+  },
+}));
 
 app.get('/', (req, res) => {
   res.status(200).send(`
