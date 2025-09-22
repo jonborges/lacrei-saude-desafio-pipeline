@@ -52,6 +52,7 @@ jobs:
         run: |
           docker pull zaproxy/zap-stable
           mkdir -p zap-reports
+          chmod 777 zap-reports
           docker run --network="host" \
             -v "$(pwd)/zap-reports":/zap/wrk/ \
             zaproxy/zap-stable zap-full-scan.py \
