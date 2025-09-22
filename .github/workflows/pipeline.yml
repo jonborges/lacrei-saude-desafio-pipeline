@@ -51,9 +51,9 @@ jobs:
       - name: Rodar ZAP Scan
         run: |
           docker pull zaproxy/zap-stable
+          mkdir -p zap-reports
           docker run --network="host" \
-            --user $(id -u):$(id -g) \
-            -v "$(pwd)":/zap/wrk/ \
+            -v "$(pwd)/zap-reports":/zap/wrk/ \
             zaproxy/zap-stable zap-full-scan.py \
             -t http://localhost:8080 \
             -r zap-report.html \
@@ -66,7 +66,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: zap-report.html
+          path: zap-reports/
 
       - name: Parar container
         run: docker stop api-lacrei-saude && docker rm api-lacrei-saude
