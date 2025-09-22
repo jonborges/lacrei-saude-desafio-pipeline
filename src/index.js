@@ -6,18 +6,24 @@ app.disable('x-powered-by');
 
 const rotaStatus = '/status';
 
-app.use(helmet.frameguard({ action: 'deny' }));
-app.use(helmet.xssFilter());
-app.use(helmet.noSniff());
-app.use(helmet.hsts({ maxAge: 31536000, includeSubDomains: true, preload: true }));
-app.use(helmet.crossOriginOpenerPolicy({ policy: "same-origin" }));
-app.use(helmet.crossOriginEmbedderPolicy({ policy: "require-corp" }));
-app.use(helmet.crossOriginResourcePolicy({ policy: "same-origin" }));
-app.use(helmet.permissionsPolicy({ policy: { camera: [], microphone: [], geolocation: [] } }));
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'"],
-    styleSrc: ["'self'", "'unsafe-inline'"],
+app.use(helmet({
+  frameguard: { action: 'deny' },
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  crossOriginOpenerPolicy: { policy: "same-origin" },
+  crossOriginEmbedderPolicy: { policy: "require-corp" },
+  crossOriginResourcePolicy: { policy: "same-origin" },
+  permissionsPolicy: {
+    policy: {
+      camera: [],
+      microphone: [],
+      geolocation: [],
+    },
+  },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+    },
   },
 }));
 
