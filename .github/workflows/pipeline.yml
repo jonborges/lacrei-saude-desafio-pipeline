@@ -52,10 +52,8 @@ jobs:
         run: |
           docker pull zaproxy/zap-stable
           docker run --network="host" \
-            -v "$(pwd)/zap-config.conf:/zap/wrk/zap-config.conf" \
             zaproxy/zap-stable zap-full-scan.py \
             -t http://localhost:8080 \
-            -c /zap/wrk/zap-config.conf \
             -r zap-report.html \
             -x zap-report.xml \
             -m 2
