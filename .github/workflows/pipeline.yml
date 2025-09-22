@@ -73,49 +73,64 @@ jobs:
         run: docker stop api-lacrei-saude && docker rm api-lacrei-saude
 
   deploy-staging:
-    runs-on: ubuntu-latest
-    needs: [build, security-analysis]
-    if: github.ref != 'refs/heads/main'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+  runs-on: ubuntu-latest
+  needs: [build, security-analysis]
+  if: github.ref != 'refs/heads/main'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v3
 
-      - name: Login Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Login Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build e Push Docker Staging
-        run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest \
-                       -t ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }} .
-          docker push ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }}
-          docker push ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest
+    - name: Build e Push Docker Staging
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest \
+                     -t ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }} .
+        docker push ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }}
+        docker push ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest
 
-      - name: Deploy Staging via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            docker pull ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }}
+    - name: Deploy Staging via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_KEY }}
+        script: |
+          # Para o container antigo se existir
+          docker stop api-lacrei-saude-staging || true
+          docker rm api-lacrei-saude-staging || true
+          
+          # Puxa a imagem de rollback para garantir que ela exista localmente
+          docker pull ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest
+          
+          # Inicia novo container
+          docker run -d --name api-lacrei-saude-staging -p 8081:3000 \
+            --restart always ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }}
+          
+          # Healthcheck robusto com loop
+          echo "Aguardando a aplicação iniciar..."
+          for i in {1..30}; do
+            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/status)
+            if [ "$STATUS_CODE" -eq 200 ]; then
+              STATUS="OK"
+              break
+            fi
+            echo -n "."
+            sleep 2
+          done
+
+          if [ "$STATUS" != "OK" ]; then
+            echo "Healthcheck falhou! Rollback container anterior..."
             docker stop api-lacrei-saude-staging || true
             docker rm api-lacrei-saude-staging || true
             docker run -d --name api-lacrei-saude-staging -p 8081:3000 \
-              --restart always \
-              ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-${{ github.sha }}
-            sleep 10
-            STATUS=$(curl -s http://localhost:8081/status | grep OK || echo "FAIL")
-            if [ "$STATUS" != "OK" ]; then
-              echo "Healthcheck falhou! Rollback container anterior..."
-              docker stop api-lacrei-saude-staging && docker rm api-lacrei-saude-staging
-              docker run -d --name api-lacrei-saude-staging -p 8081:3000 \
-                --restart always \
-                ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest
-              exit 1
-            fi
+              --restart always ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:staging-latest
+            exit 1
+          fi
 
   deploy-production:
     runs-on: ubuntu-latest
@@ -151,9 +166,19 @@ jobs:
             docker run -d --name api-lacrei-saude-production -p 80:3000 \
               --restart always \
               ${{ secrets.DOCKER_USERNAME }}/api-lacrei-saude:${{ github.sha }}
-            # Healthcheck básico
-            sleep 10
-            STATUS=$(curl -s http://localhost/status | grep OK || echo "FAIL")
+            
+            # Healthcheck robusto com loop
+            echo "Aguardando a aplicação iniciar..."
+            for i in {1..30}; do
+              STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/status)
+              if [ "$STATUS_CODE" -eq 200 ]; then
+                STATUS="OK"
+                break
+              fi
+              echo -n "."
+              sleep 2
+            done
+
             if [ "$STATUS" != "OK" ]; then
               echo "Healthcheck falhou! Rollback container anterior..."
               docker stop api-lacrei-saude-production && docker rm api-lacrei-saude-production
