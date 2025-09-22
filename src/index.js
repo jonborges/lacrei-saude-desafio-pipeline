@@ -30,17 +30,11 @@ app.use(helmet({
   },
 }));
 
-app.use((req, res, next) => {
-  res.setHeader('Permissions-Policy', "camera=(), microphone=(), geolocation=()");
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  next();
-});
-
-
-app.use((req, res, next) => {
-  res.setHeader('Permissions-Policy', "camera=(), microphone=(), geolocation=()");
-  next();
-});
+app.use(express.static(path.join(__dirname, '../public'), {
+  setHeaders: (res, path) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
 
 
 app.get(['/sitemap.xml', '/robots.txt'], (req, res) => {
