@@ -1,26 +1,19 @@
 const express = require('express');
+const helmet = require('helmet');
 
 const app = express();
 app.disable('x-powered-by');
 
 const rotaStatus = '/status';
 
-// Middleware para adicionar cabeçalhos de segurança
-app.use((req, res, next) => {
-  // Previne clickjacking
-  res.setHeader('X-Frame-Options', 'DENY');
-  // Previne MIME-sniffing
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  // Define uma política de segurança de conteúdo básica
-  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'");
-  // Controla o uso de recursos do navegador
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  // Mitiga ataques do tipo Spectre
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-  next();
-});
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "style-src": ["'self'", "'unsafe-inline'"],
+    },
+  },
+}));
 
 app.get('/', (req, res) => {
   res.status(200).send(`
@@ -72,7 +65,6 @@ const server = app.listen(porta, () => {
   console.log(`🚀 Servidor subiu com sucesso na porta ${porta}!`);
 });
 
-// Graceful Shutdown: permite que o processo finalize de forma limpa.
 process.on('SIGTERM', () => {
   console.log('Recebido SIGTERM. Encerrando o servidor...');
   server.close(() => {

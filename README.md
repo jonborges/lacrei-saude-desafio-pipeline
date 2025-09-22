@@ -103,16 +103,15 @@ O pipeline será executado novamente, mas fará o checkout do código antigo, co
 
 ## 🚀 Setup e Execução
  
-### Configuração do Pipeline
-1.  Clone este repositório:
+### Acionando o Pipeline
+
+O pipeline é acionado automaticamente a cada `push`.
+
+*   **Deploy em Staging:** Faça o push para qualquer branch que não seja a `main`.
     ```bash
-    git clone https://github.com/seu-usuario/desafio-lacrei-saude.git
+    git push origin develop
     ```
-2.  Instale as dependências:
+*   **Deploy em Produção:** Faça o push para a branch `main`.
     ```bash
-    npm install
-    ```
-3.  Execute os testes para validar o ambiente:
-    ```bash
-    npm test
+    git push origin main
     ```
