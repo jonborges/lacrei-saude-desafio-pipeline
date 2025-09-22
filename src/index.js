@@ -79,7 +79,7 @@ process.on('SIGTERM', () => {
   server.close(() => {
     console.log('Servidor encerrado.');
     process.exit(0);
-  },
+  });
 });
 
 module.exports = server;
