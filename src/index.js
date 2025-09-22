@@ -1,10 +1,14 @@
 const express = require('express');
 const helmet = require('helmet');
+const path = require('path');
 
 const app = express();
 app.disable('x-powered-by');
 
 const rotaStatus = '/status';
+
+
+app.use(express.static(path.join(__dirname, '../public')));
 
 
 app.use(helmet({
@@ -13,13 +17,6 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: "same-origin" },
   crossOriginEmbedderPolicy: { policy: "require-corp" },
   crossOriginResourcePolicy: { policy: "same-origin" },
-  permissionsPolicy: {
-    policy: {
-      camera: ["'none'"],
-      microphone: ["'none'"],
-      geolocation: ["'none'"]
-    },
-  },
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -34,13 +31,19 @@ app.use(helmet({
   },
 }));
 
-// Rotas mínimas para satisfazer o ZAP Scan
+
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
+
 app.get(['/sitemap.xml', '/robots.txt'], (req, res) => {
   res.setHeader('Content-Type', 'text/plain');
   res.status(200).send('');
 });
 
-// Rota principal
+
 app.get('/', (req, res) => {
   res.status(200).send(`
     <!DOCTYPE html>
@@ -49,12 +52,7 @@ app.get('/', (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>API Lacrei Saúde</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { text-align: center; background-color: white; padding: 40px 50px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); }
-        h1 { color: #0d6efd; margin-bottom: 15px; }
-        p { font-size: 1.1em; color: #555; }
-      </style>
+      <link rel="stylesheet" href="/style.css">
     </head>
     <body>
       <div class="container">
@@ -66,7 +64,7 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Rota de status
+
 app.get(rotaStatus, (req, res) => {
   const resposta = { status: 'OK', timestamp: new Date().toISOString() };
   res.json(resposta);
